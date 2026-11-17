@@ -55,4 +55,5 @@ It needs `git`, `gh`, and Python 3. Set `OPEN_CI_OPENER` to choose the browser. 
 
 ## License
 
-Licensed under the GNU General Public License, version 3 or later. See [LICENSE](LICENSE).
+Copyright © 2026 8th Light, LLC. Licensed under the GNU General Public License, version 3 or later. See
+[LICENSE](LICENSE).
