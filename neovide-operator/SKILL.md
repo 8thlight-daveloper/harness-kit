@@ -16,16 +16,25 @@ this without being asked.
 Neovide runs an embedded nvim per window. Its RPC socket is `nvim.<pid>.0` under `$TMPDIR/nvim.$USER/<random>/`. The
 random directory name is not the socket. The socket moves on every restart, so find it each time.
 
-A socket belongs to Neovide when the nvim's grandparent process is `neovide`. nvim in tmux has a different ancestry, so
-this keeps `tmux-operator` instances out.
+A socket belongs to Neovide when one of the nvim's first four ancestors is a `neovide` process. The depth varies with
+the launch path. Neovide.app gives nvim, `(login)`, Neovide. The `neovide` CLI started from a wrapper script gives nvim,
+`neovide`, script. nvim in tmux has no `neovide` ancestor, so this keeps `tmux-operator` instances out.
 
 ```sh
+is_neovide() {
+  P=$1
+  for _ in 1 2 3 4; do
+    P=$(ps -o ppid= -p "$P" 2>/dev/null | tr -d ' ')
+    [ -n "$P" ] || return 1
+    ps -o command= -p "$P" 2>/dev/null | grep -qi neovide && return 0
+  done
+  return 1
+}
+
 DIR=$(pwd -P)
 for S in "$TMPDIR"nvim.$USER/*/nvim.*.0; do
   PID=${S##*/nvim.}; PID=${PID%.0}
-  PP=$(ps -o ppid= -p "$PID" 2>/dev/null | tr -d ' ') || continue
-  GP=$(ps -o ppid= -p "$PP" 2>/dev/null | tr -d ' ')
-  ps -o command= -p "$GP" 2>/dev/null | grep -qi neovide || continue
+  is_neovide "$PID" || continue
   CWD=$(nvim --server "$S" --remote-expr 'getcwd()' 2>/dev/null) || continue
   [ "$CWD" = "$DIR" ] && echo "$S"
 done
