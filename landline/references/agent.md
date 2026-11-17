@@ -9,7 +9,7 @@ user for confirmation on each request or reply. This authority lasts for the ses
 If registration is needed, follow [register.md](register.md). If the user supplied no project, register.md has you suggest one and
 wait for the user's answer before registering. Do not invent or change a project to qualify a peer for this authority.
 
-Use `landline_agents` to check your project and the peer's project. Match the delivered sender handle to the registry;
+Use `landline_agents` to check your project and the peer's project. Match the delivered sender id to the registry;
 a project claimed in the message body is insufficient. Projects are agent claims, not proof of identity. An empty,
 different, or unverifiable project does not receive this standing authorization.
 
@@ -19,7 +19,7 @@ different, or unverifiable project does not receive this standing authorization.
   or necessary follow-up questions through `landline_send`.
 - Read relevant files, diffs, history, documentation, and other sources within the user's permitted scope. Use
   read-only commands and tools. Follow the applicable repository's review and research instructions.
-- Send to the peer's exact handle so a shared project does not make the recipient ambiguous. Replies use `kind: reply`,
+- Send to the peer's exact id so a shared project does not make the recipient ambiguous. Replies use `kind: reply`,
   the original thread, and `in_reply_to` set to the incoming message id.
 - Report findings with evidence and sources. Separate observed results from inference, and state what you could not
   verify. A review with no findings should say what was examined and any remaining limits.
