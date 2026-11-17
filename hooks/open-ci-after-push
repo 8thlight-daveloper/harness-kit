@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Open the CI run for a commit in the user's browser after an agent runs `git push`.
+
+Works as a PostToolUse hook in Claude Code and Codex, or by hand. It reads the hook JSON on stdin,
+or takes --command and --cwd. It never writes to stdout, never fails the hook, and returns at once:
+the wait for the run happens in a detached child.
+
+Environment:
+  OPEN_CI_OPENER   Command that opens a URL. The URL is appended. Default: `open -a Zen` on macOS,
+                   `xdg-open` elsewhere.
+  OPEN_CI_HOSTS    Space-separated Git hosts that count as GitHub. Default: github.com. Add a GitHub
+                   Enterprise host here. Any other host, a non-git directory, or a missing `gh` exits early.
+  OPEN_CI_WAIT     Seconds to wait for the run to appear. Default 30.
+  OPEN_CI_DEBUG    A file path. The raw stdin payload is written there, to check a harness's shape.
+"""
+import argparse
+import json
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+
+PUSH = re.compile(r"\bgit\b[^|;&\n]*\bpush\b")
+
+
+def command_from(payload):
+    tool_input = payload.get("tool_input") or {}
+    for value in (tool_input.get("command"), tool_input.get("cmd"), payload.get("command")):
+        if isinstance(value, list):
+            value = " ".join(str(part) for part in value)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def git(cwd, *args):
+    result = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def remote_host(url):
+    scp_like = re.match(r"^[^/@:]+@([^:/]+):", url)
+    if scp_like:
+        return scp_like.group(1).lower()
+    scheme = re.match(r"^[a-z+.-]+://(?:[^@/]*@)?([^:/]+)", url, re.IGNORECASE)
+    return scheme.group(1).lower() if scheme else ""
+
+
+def on_github(cwd):
+    upstream = git(cwd, "rev-parse", "--abbrev-ref", "@{u}")
+    remote = upstream.split("/", 1)[0]
+    url = git(cwd, "remote", "get-url", remote) if remote else ""
+    hosts = os.environ.get("OPEN_CI_HOSTS", "github.com").lower().split()
+    return remote_host(url) in hosts
+
+
+def pushed_head(cwd):
+    head = git(cwd, "rev-parse", "HEAD")
+    upstream = git(cwd, "rev-parse", "@{u}")
+    return head if head and head == upstream else ""
+
+
+def run_url(cwd, head, wait):
+    deadline = time.monotonic() + wait
+    while True:
+        result = subprocess.run(
+            ["gh", "run", "list", "--commit", head, "--limit", "1", "--json", "url", "--jq", ".[0].url // empty"],
+            cwd=cwd, capture_output=True, text=True,
+        )
+        url = result.stdout.strip() if result.returncode == 0 else ""
+        if url or time.monotonic() >= deadline:
+            return url
+        time.sleep(2)
+
+
+def opener():
+    configured = os.environ.get("OPEN_CI_OPENER")
+    if configured:
+        return shlex.split(configured)
+    return ["open", "-a", "Zen"] if sys.platform == "darwin" else ["xdg-open"]
+
+
+def open_when_ready(cwd, head):
+    url = run_url(cwd, head, float(os.environ.get("OPEN_CI_WAIT", "30")))
+    if url:
+        subprocess.run([*opener(), url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def detach():
+    if os.fork():
+        return False
+    os.setsid()
+    if os.fork():
+        os._exit(0)
+    devnull = os.open(os.devnull, os.O_RDWR)
+    for fd in (0, 1, 2):
+        os.dup2(devnull, fd)
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--command")
+    parser.add_argument("--cwd")
+    args = parser.parse_args()
+
+    payload = {}
+    if not sys.stdin.isatty():
+        raw = sys.stdin.read()
+        debug = os.environ.get("OPEN_CI_DEBUG")
+        if debug and raw:
+            with open(debug, "w") as handle:
+                handle.write(raw)
+        try:
+            payload = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            payload = {}
+
+    command = args.command or command_from(payload)
+    if not PUSH.search(command) or "--dry-run" in command:
+        return
+    cwd = args.cwd or payload.get("cwd") or os.getcwd()
+    if not shutil.which("gh") or not on_github(cwd):
+        return
+    head = pushed_head(cwd)
+    if head and detach():
+        open_when_ready(cwd, head)
+        os._exit(0)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        pass
