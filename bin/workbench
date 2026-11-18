@@ -1,6 +1,8 @@
 #! /usr/bin/env sh
 # workbench [-n|--dry-run] [DIR]
 # Open Neovide plus a kitty window (Claude, Codex, CLI tabs), all rooted at DIR (default: $PWD).
+# A bare DIR such as `harness-kit` names a folder under $WORKBENCH_HOME when one exists there. A path that starts with
+# `/`, `./`, or `../`, or is `.` or `..`, always means that path.
 
 dry_run=
 if [ "$1" = "-n" ] || [ "$1" = "--dry-run" ]; then
@@ -8,7 +10,17 @@ if [ "$1" = "-n" ] || [ "$1" = "--dry-run" ]; then
   shift
 fi
 
-WORKBENCH_CWD=$(cd "${1:-$PWD}" && pwd -P) || exit 1
+requested=${1:-$PWD}
+case "$requested" in
+  /* | . | .. | ./* | ../*) ;;
+  *) [ -n "$WORKBENCH_HOME" ] && [ -d "${WORKBENCH_HOME%/}/$requested" ] && requested=${WORKBENCH_HOME%/}/$requested ;;
+esac
+
+WORKBENCH_CWD=$(cd "$requested" 2>/dev/null && pwd -P) || {
+  echo "workbench: no such directory: $requested" >&2
+  [ -n "$WORKBENCH_HOME" ] && echo "workbench: also looked in $WORKBENCH_HOME" >&2
+  exit 1
+}
 export WORKBENCH_CWD
 window_title=${WORKBENCH_CWD##*/}
 

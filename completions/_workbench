@@ -1,0 +1,19 @@
+#compdef workbench
+
+# Complete `workbench [-n|--dry-run] [DIR]`. Offer folders under $WORKBENCH_HOME, then ordinary directories.
+_workbench() {
+  local projects_home=${WORKBENCH_HOME:-}
+  local -a sources=('directories:directory:_files -/')
+
+  if [[ -n $projects_home && -d $projects_home ]]; then
+    sources=("projects:project:_path_files -W ${(q)projects_home} -/" $sources)
+  fi
+
+  _arguments -s \
+    '(-n --dry-run)'{-n,--dry-run}'[print the directory and session, open nothing]' \
+    '1: :->dir' && return
+
+  [[ $state == dir ]] && _alternative "${sources[@]}"
+}
+
+_workbench "$@"

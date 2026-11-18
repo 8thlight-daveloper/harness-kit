@@ -7,6 +7,7 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 | Folder                                         | Holds                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
 | [bin/](bin/workbench)                            | `workbench`, which opens Neovide and a kitty window with Claude, Codex, and CLI tabs, and `kitty-single`, which runs kitty as one shared process |
+| [completions/](completions/_workbench)         | `_workbench`, zsh completion for `workbench` project names                           |
 | [hooks/](hooks/open-ci-after-push)             | `open-ci-after-push`, a PostToolUse hook that opens the CI run after an agent pushes |
 | [landline/](landline/SKILL.md)                 | Register a session with Landline, and enable read-only exchanges with matching peers |
 | [neovide-operator/](neovide-operator/SKILL.md) | Show files in the Neovide window that matches the working directory                  |
@@ -33,6 +34,40 @@ ln -s "$PWD/bin/kitty-single" ~/bin/kitty-single
 ```
 
 `workbench` calls `kitty-single`, so install both.
+
+### workbench
+
+`workbench` opens one Neovide window and one kitty window, both rooted at a project folder. The kitty window has a
+Claude tab, a Codex tab, and a CLI tab.
+
+It needs these on your `PATH`: `neovide`, `nvim`, `kitty`, `landline`, `claude`, and `codex`. It also uses `lsof` and
+`ps`, and has only been run on macOS.
+
+Set `WORKBENCH_HOME` to the folder that holds your projects, and `workbench` opens one by name from anywhere:
+
+```sh
+export WORKBENCH_HOME=~/Projects
+workbench harness-kit
+```
+
+A bare name is looked up under `WORKBENCH_HOME` first. A path that starts with `/`, `./`, or `../`, or is `.` or `..`,
+always means that path. With no argument, `workbench` uses the current directory.
+
+For zsh completion of project names, link `completions/_workbench` into a directory on your `fpath`, then run
+`compinit`:
+
+```sh
+ln -s "$PWD/completions/_workbench" ~/.zsh/completions/_workbench
+```
+
+If a generated shell config, such as home-manager's, runs `compinit` before your own init, register the function
+afterward instead. No second `compinit` is needed:
+
+```sh
+fpath+=(/path/to/harness-kit/completions)
+autoload -Uz _workbench
+compdef _workbench workbench
+```
 
 ## Use the CI hook
 
