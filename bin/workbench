@@ -1,0 +1,85 @@
+#! /usr/bin/env sh
+# workbench [-n|--dry-run] [DIR]
+# Open Neovide plus a kitty window (Claude, Codex, CLI tabs), all rooted at DIR (default: $PWD).
+
+dry_run=
+if [ "$1" = "-n" ] || [ "$1" = "--dry-run" ]; then
+  dry_run=1
+  shift
+fi
+
+WORKBENCH_CWD=$(cd "${1:-$PWD}" && pwd -P) || exit 1
+export WORKBENCH_CWD
+window_title=${WORKBENCH_CWD##*/}
+
+user_shell=${SHELL:-zsh}
+session_file="${TMPDIR:-/tmp}/workbench-$$.session"
+
+# A running single-instance kitty spawns windows with its own environment, not ours, so pass the project name with --env.
+# Run agents under a non-interactive login shell (PATH, no prompt or banner), then fall back to a normal login shell.
+cat > "$session_file" <<EOF
+new_tab Claude
+cd $WORKBENCH_CWD
+launch --env "WORKBENCH_PROJECT=$window_title" $user_shell -lc 'landline claude --project "\$WORKBENCH_PROJECT"; exec $user_shell -l'
+focus
+new_tab Codex
+cd $WORKBENCH_CWD
+launch $user_shell -lc 'codex; exec $user_shell -l'
+new_tab CLI
+cd $WORKBENCH_CWD
+launch
+EOF
+
+if [ -n "$dry_run" ]; then
+  echo "cwd: $WORKBENCH_CWD"
+  echo "session: $session_file"
+  cat "$session_file"
+  exit 0
+fi
+
+nvim_sockets() {
+  ls "${TMPDIR:-/tmp}"/nvim."$USER"/*/nvim.*.0 2>/dev/null
+}
+
+# nvim under Neovide has `neovide` as its parent (standalone binary) or grandparent (Neovide.app). Read the process table
+# and all working directories in one call each, since asking every nvim over RPC is slow and can hang.
+neovide_open_in_dir() {
+  nvim_pids=$(nvim_sockets | sed 's/.*nvim\.//; s/\.0$//' | paste -sd, -)
+  [ -n "$nvim_pids" ] || return 1
+  neovide_pids=$(ps -axo pid=,ppid=,command= | awk -v want="$nvim_pids" '
+    BEGIN { n = split(want, w, ","); for (i = 1; i <= n; i++) wanted[w[i]] = 1 }
+    { pid = $1; ppid[pid] = $2; sub(/^ *[0-9]+ +[0-9]+ +/, ""); cmd[pid] = $0 }
+    END {
+      for (p in wanted) {
+        parent = ppid[p]
+        grandparent = ppid[parent]
+        if (tolower(cmd[parent] " " cmd[grandparent]) ~ /neovide/) printf "%s,", p
+      }
+    }')
+  [ -n "$neovide_pids" ] || return 1
+  lsof -a -d cwd -Fn -p "${neovide_pids%,}" 2>/dev/null | grep -qxF "n$WORKBENCH_CWD"
+}
+
+# nvim ignores startup args when Neovide reuses an instance, so set the title over RPC once the new window is up.
+title_neovide_window() {
+  printf '%s' "$window_title" > "$session_file.title"
+  title_expr="execute(\"let &titlestring = substitute(readfile('$session_file.title')[0], '%', '%%', 'g') | set title\")"
+  tries=0
+  while [ "$tries" -lt 50 ]; do
+    for sock in $(nvim_sockets); do
+      case "$sockets_before" in *"$sock"*) continue ;; esac
+      [ "$(nvim --server "$sock" --remote-expr 'getcwd()' 2>/dev/null)" = "$WORKBENCH_CWD" ] || continue
+      nvim --server "$sock" --remote-expr "$title_expr" >/dev/null 2>&1
+      return
+    done
+    tries=$((tries + 1))
+    sleep 0.2
+  done
+}
+
+if ! neovide_open_in_dir; then
+  sockets_before=$(nvim_sockets)
+  (cd "$WORKBENCH_CWD" && nohup neovide --reuse-instance --new-window >/dev/null 2>&1 &)
+  (trap "" HUP; title_neovide_window </dev/null >/dev/null 2>&1 &)
+fi
+nohup kitty-single --title "$window_title" --directory "$WORKBENCH_CWD" --session "$session_file" >/dev/null 2>&1 &

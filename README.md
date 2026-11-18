@@ -6,6 +6,7 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 
 | Folder                                         | Holds                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [bin/](bin/workbench)                            | `workbench`, which opens Neovide and a kitty window with Claude, Codex, and CLI tabs, and `kitty-single`, which runs kitty as one shared process |
 | [hooks/](hooks/open-ci-after-push)             | `open-ci-after-push`, a PostToolUse hook that opens the CI run after an agent pushes |
 | [landline/](landline/SKILL.md)                 | Register a session with Landline, and enable read-only exchanges with matching peers |
 | [neovide-operator/](neovide-operator/SKILL.md) | Show files in the Neovide window that matches the working directory                  |
@@ -21,6 +22,17 @@ Link the skill folder into each harness:
 ln -s "$PWD/neovide-operator" ~/.claude/skills/neovide-operator
 ln -s "$PWD/neovide-operator" ~/.codex/skills/neovide-operator
 ```
+
+## Install the scripts
+
+Link each script in `bin/` into a directory on your `PATH`:
+
+```sh
+ln -s "$PWD/bin/workbench" ~/bin/workbench
+ln -s "$PWD/bin/kitty-single" ~/bin/kitty-single
+```
+
+`workbench` calls `kitty-single`, so install both.
 
 ## Use the CI hook
 

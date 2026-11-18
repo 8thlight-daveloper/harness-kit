@@ -1,0 +1,16 @@
+#! /usr/bin/env sh
+# kitty-single [KITTY_ARGS...]
+# Run kitty so every invocation shares one process, which makes Cmd+` cycle all its OS windows.
+# On macOS, launch through LaunchServices so the Dock shows the bundle's appearance-aware icon, not the static fallback.
+kitty_bin=$(command -v kitty || echo /run/current-system/sw/bin/kitty)
+set -- --single-instance -o macos_quit_when_last_window_closed=yes "$@"
+
+if [ "$(uname)" = Darwin ]; then
+  real_bin=$(readlink -f "$kitty_bin")
+  bundle=${real_bin%/Contents/MacOS/*}
+  if [ "$bundle" != "$real_bin" ] && [ -d "$bundle" ]; then
+    exec open -n "$bundle" --args "$@"
+  fi
+fi
+
+exec "$kitty_bin" "$@"
