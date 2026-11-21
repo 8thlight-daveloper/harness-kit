@@ -12,6 +12,7 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 | [landline/](landline/SKILL.md)                 | Register a session with Landline, and enable read-only exchanges with matching peers |
 | [neovide-operator/](neovide-operator/SKILL.md) | Show files in the Neovide window that matches the working directory                  |
 | [operator/](operator/SKILL.md)                 | Turn a session into an operator that dispatches work to other agents                 |
+| [rex-operator/](rex-operator/SKILL.md)         | Show files in the nvim pane of the Rex session that runs this agent                  |
 | [tmux-operator/](tmux-operator/SKILL.md)       | Show files in an nvim session running in tmux                                        |
 | [ux-designer/](ux-designer/SKILL.md)           | Evaluate and shape product interfaces                                                |
 
@@ -23,6 +24,9 @@ Link the skill folder into each harness:
 ln -s "$PWD/neovide-operator" ~/.claude/skills/neovide-operator
 ln -s "$PWD/neovide-operator" ~/.codex/skills/neovide-operator
 ```
+
+`rex-operator` goes with `workbench`, which gives the tmux session the `REX_SESSION` and `REX_EDITOR_BLOCK` IDs
+that the skill reads to find the editor pane.
 
 ## Install the scripts
 
