@@ -6,7 +6,7 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 
 | Folder                                         | Holds                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [bin/](bin/workbench)                            | `workbench`, which opens Neovide and a kitty window with Claude, Codex, and CLI tabs, and `kitty-single`, which runs kitty as one shared process |
+| [bin/](bin/workbench)                            | `workbench`, which opens a Rex session with your editor and a tmux session of agents |
 | [completions/](completions/_workbench)         | `_workbench`, zsh completion for `workbench` project names                           |
 | [hooks/](hooks/open-ci-after-push)             | `open-ci-after-push`, a PostToolUse hook that opens the CI run after an agent pushes |
 | [landline/](landline/SKILL.md)                 | Register a session with Landline, and enable read-only exchanges with matching peers |
@@ -26,22 +26,29 @@ ln -s "$PWD/neovide-operator" ~/.codex/skills/neovide-operator
 
 ## Install the scripts
 
-Link each script in `bin/` into a directory on your `PATH`:
+Link `workbench` into a directory on your `PATH`:
 
 ```sh
 ln -s "$PWD/bin/workbench" ~/bin/workbench
-ln -s "$PWD/bin/kitty-single" ~/bin/kitty-single
 ```
-
-`workbench` calls `kitty-single`, so install both.
 
 ### workbench
 
-`workbench` opens one Neovide window and one kitty window, both rooted at a project folder. The kitty window has a
-Claude tab, a Codex tab, and a CLI tab.
+`workbench` opens a Rex session named after the project folder, with one Editor tab rooted at the folder. No other app
+opens. Running it again for the same project reuses the session.
 
-It needs these on your `PATH`: `neovide`, `nvim`, `kitty`, `landline`, `claude`, and `codex`. It also uses `lsof` and
-`ps`, and has only been run on macOS.
+- **Left side:** `$EDITOR`, or nvim when it is unset. It may include arguments, such as `nvim -u NONE`.
+- **Right side:** 35 percent of the width, attached to a tmux session of the same name with Claude, Codex, and CLI
+  windows. Switch windows with tmux's own keys. Change `agents_percent` at the top of the script to resize it.
+
+The tmux session outlives the Rex session. If you close the Rex session and run `workbench` again, the new Rex session
+attaches to the same tmux windows and their running agents.
+
+It needs `rex`, `jq`, `tmux`, `landline`, `claude`, `codex`, and your editor on your `PATH`. Selecting the new session
+in the Rex app needs Remote Control. Without it, the script says so and you pick the session yourself.
+
+Do not bind a key sequence that starts with your tmux prefix in Rex's `init.lua`. Rex consumes the first key of a
+sequence, so tmux would never see the prefix.
 
 Set `WORKBENCH_HOME` to the folder that holds your projects, and `workbench` opens one by name from anywhere:
 

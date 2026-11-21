@@ -1,6 +1,9 @@
 #! /usr/bin/env sh
 # workbench [-n|--dry-run] [DIR]
-# Open Neovide plus a kitty window (Claude, Codex, CLI tabs), all rooted at DIR (default: $PWD).
+# Open a Rex session named after DIR (default: $PWD) with one Editor tab, rooted at DIR. The left side holds $EDITOR, or
+# nvim when it is unset. The right side attaches to a tmux session of the same name, with Claude, Codex, and CLI windows.
+# Everything lives in the one Rex session, so no other app opens. A Rex session with that name is reused, not
+# duplicated. The tmux session outlives the Rex session, so a new Rex session attaches to it again.
 # A bare DIR such as `harness-kit` names a folder under $WORKBENCH_HOME when one exists there. A path that starts with
 # `/`, `./`, or `../`, or is `.` or `..`, always means that path.
 
@@ -16,82 +19,81 @@ case "$requested" in
   *) [ -n "$WORKBENCH_HOME" ] && [ -d "${WORKBENCH_HOME%/}/$requested" ] && requested=${WORKBENCH_HOME%/}/$requested ;;
 esac
 
-WORKBENCH_CWD=$(cd "$requested" 2>/dev/null && pwd -P) || {
+cwd=$(cd "$requested" 2>/dev/null && pwd -P) || {
   echo "workbench: no such directory: $requested" >&2
   [ -n "$WORKBENCH_HOME" ] && echo "workbench: also looked in $WORKBENCH_HOME" >&2
   exit 1
 }
-export WORKBENCH_CWD
-window_title=${WORKBENCH_CWD##*/}
+project=${cwd##*/}
 
+for tool in rex jq tmux; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "workbench: $tool not found on PATH" >&2
+    exit 1
+  }
+done
+
+# Percent of the window width given to the agents.
+agents_percent=35
+editor_command=${EDITOR:-nvim}
 user_shell=${SHELL:-zsh}
-session_file="${TMPDIR:-/tmp}/workbench-$$.session"
 
-# A running single-instance kitty spawns windows with its own environment, not ours, so pass the project name with --env.
+# tmux changes `.` and `:` in a session name to `_`, and `=` makes a target match the whole name.
+tmux_name=$(printf '%s' "$project" | tr '.:' '__')
+tmux_target="=$tmux_name"
+
+show_session() {
+  rex do session.select session_id="$session" >/dev/null 2>&1 ||
+    echo "workbench: session \"$project\" is ready. Select it in Rex, or enable Remote Control to select it from here." >&2
+}
+
 # Run agents under a non-interactive login shell (PATH, no prompt or banner), then fall back to a normal login shell.
-cat > "$session_file" <<EOF
-new_tab Claude
-cd $WORKBENCH_CWD
-launch --env "WORKBENCH_PROJECT=$window_title" $user_shell -lc 'landline claude --project "\$WORKBENCH_PROJECT"; exec $user_shell -l'
-focus
-new_tab Codex
-cd $WORKBENCH_CWD
-launch $user_shell -lc 'codex; exec $user_shell -l'
-new_tab CLI
-cd $WORKBENCH_CWD
-launch
-EOF
+# tmux panes inherit the environment of whoever started the tmux server, so give the session the Rex IDs of this
+# workbench. Agents read REX_SESSION and REX_EDITOR_BLOCK to find the editor. An existing tmux session keeps its old
+# windows, which hold old IDs, but new windows get the current ones.
+create_tmux_session() {
+  if tmux has-session -t "$tmux_target" 2>/dev/null; then
+    tmux set-environment -t "$tmux_target" REX_SESSION "$session" &&
+      tmux set-environment -t "$tmux_target" REX_EDITOR_BLOCK "$editor"
+    return
+  fi
+  PROJECT=$project tmux new-session -d -s "$tmux_name" -n Claude -c "$cwd" \
+    -e "REX_SESSION=$session" -e "REX_EDITOR_BLOCK=$editor" \
+    "$user_shell -lc 'landline claude --project \"\$PROJECT\"; exec $user_shell -l'" \; \
+    new-window -n Codex -c "$cwd" "$user_shell -lc 'codex; exec $user_shell -l'" \; \
+    new-window -n CLI -c "$cwd" \; \
+    select-window -t Claude
+}
 
 if [ -n "$dry_run" ]; then
-  echo "cwd: $WORKBENCH_CWD"
-  echo "session: $session_file"
-  cat "$session_file"
+  cat <<DRYRUN
+cwd: $cwd
+rex new "$project" -c "$cwd" --window Editor --json -- sh -c "exec $editor_command"
+tmux new-session -d -s "$tmux_name" -n Claude -c "$cwd" -e REX_SESSION=SESSION -e REX_EDITOR_BLOCK=EDITOR ...   (then windows Codex and CLI), unless it exists
+rex split -s SESSION -b EDITOR --split=right --ratio $agents_percent --label Agents -c "$cwd" -- tmux attach -t "$tmux_target"
+rex do session.select session_id=SESSION
+DRYRUN
   exit 0
 fi
 
-nvim_sockets() {
-  ls "${TMPDIR:-/tmp}"/nvim."$USER"/*/nvim.*.0 2>/dev/null
-}
-
-# nvim under Neovide has `neovide` as its parent (standalone binary) or grandparent (Neovide.app). Read the process table
-# and all working directories in one call each, since asking every nvim over RPC is slow and can hang.
-neovide_open_in_dir() {
-  nvim_pids=$(nvim_sockets | sed 's/.*nvim\.//; s/\.0$//' | paste -sd, -)
-  [ -n "$nvim_pids" ] || return 1
-  neovide_pids=$(ps -axo pid=,ppid=,command= | awk -v want="$nvim_pids" '
-    BEGIN { n = split(want, w, ","); for (i = 1; i <= n; i++) wanted[w[i]] = 1 }
-    { pid = $1; ppid[pid] = $2; sub(/^ *[0-9]+ +[0-9]+ +/, ""); cmd[pid] = $0 }
-    END {
-      for (p in wanted) {
-        parent = ppid[p]
-        grandparent = ppid[parent]
-        if (tolower(cmd[parent] " " cmd[grandparent]) ~ /neovide/) printf "%s,", p
-      }
-    }')
-  [ -n "$neovide_pids" ] || return 1
-  lsof -a -d cwd -Fn -p "${neovide_pids%,}" 2>/dev/null | grep -qxF "n$WORKBENCH_CWD"
-}
-
-# nvim ignores startup args when Neovide reuses an instance, so set the title over RPC once the new window is up.
-title_neovide_window() {
-  printf '%s' "$window_title" > "$session_file.title"
-  title_expr="execute(\"let &titlestring = substitute(readfile('$session_file.title')[0], '%', '%%', 'g') | set title\")"
-  tries=0
-  while [ "$tries" -lt 50 ]; do
-    for sock in $(nvim_sockets); do
-      case "$sockets_before" in *"$sock"*) continue ;; esac
-      [ "$(nvim --server "$sock" --remote-expr 'getcwd()' 2>/dev/null)" = "$WORKBENCH_CWD" ] || continue
-      nvim --server "$sock" --remote-expr "$title_expr" >/dev/null 2>&1
-      return
-    done
-    tries=$((tries + 1))
-    sleep 0.2
-  done
-}
-
-if ! neovide_open_in_dir; then
-  sockets_before=$(nvim_sockets)
-  (cd "$WORKBENCH_CWD" && nohup neovide --reuse-instance --new-window >/dev/null 2>&1 &)
-  (trap "" HUP; title_neovide_window </dev/null >/dev/null 2>&1 &)
+session=$(rex ls --json | jq -r --arg label "$project" '[.sessions[] | select(.label == $label)][0].session_id // empty')
+if [ -n "$session" ]; then
+  show_session
+  exit 0
 fi
-nohup kitty-single --title "$window_title" --directory "$WORKBENCH_CWD" --session "$session_file" >/dev/null 2>&1 &
+
+created=$(rex new "$project" -c "$cwd" --window Editor --json -- sh -c "exec $editor_command") &&
+  session=$(printf '%s' "$created" | jq -er '.session_id') &&
+  editor=$(printf '%s' "$created" | jq -er '.initial_windows[0].block_ids[0]') || {
+  echo "workbench: could not create session \"$project\"" >&2
+  exit 1
+}
+
+create_tmux_session || {
+  echo "workbench: could not create tmux session \"$tmux_name\"" >&2
+  exit 1
+}
+
+rex split -s "$session" -b "$editor" --split=right --ratio "$agents_percent" --label Agents -c "$cwd" --json \
+  -- tmux attach -t "$tmux_target" >/dev/null
+show_session
