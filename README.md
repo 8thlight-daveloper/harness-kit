@@ -10,8 +10,8 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 | [completions/](completions/_workbench)         | `_workbench`, zsh completion for `workbench` project names                           |
 | [hooks/](hooks/open-ci-after-push)             | `open-ci-after-push`, a PostToolUse hook that opens the CI run after an agent pushes |
 | [iterate/](iterate/SKILL.md)                   | Walk through pending decisions or questions one at a time, with enough context to decide each |
-| [operator/](operator/SKILL.md)                 | Turn a session into an operator that dispatches work to other agents                 |
-| [rex-operator/](rex-operator/SKILL.md)         | Show files in the nvim pane of the Rex session that runs this agent                  |
+| [orchestrator/](orchestrator/SKILL.md)         | Turn a session into an orchestrator that dispatches work to other agents             |
+| [rex-editor/](rex-editor/SKILL.md)             | Show files in the nvim pane of the Rex session that runs this agent                  |
 | [ux-designer/](ux-designer/SKILL.md)           | Evaluate and shape product interfaces                                                |
 
 ## Install a skill
@@ -19,11 +19,11 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 Link the skill folder into each harness:
 
 ```sh
-ln -s "$PWD/operator" ~/.claude/skills/operator
-ln -s "$PWD/operator" ~/.codex/skills/operator
+ln -s "$PWD/orchestrator" ~/.claude/skills/orchestrator
+ln -s "$PWD/orchestrator" ~/.codex/skills/orchestrator
 ```
 
-`rex-operator` goes with `workbench`, which gives the tmux session the `REX_SESSION` and `REX_EDITOR_BLOCK` IDs
+`rex-editor` goes with `workbench`, which gives the tmux session the `REX_SESSION` and `REX_EDITOR_BLOCK` IDs
 that the skill reads to find the editor pane.
 
 ## Install the scripts

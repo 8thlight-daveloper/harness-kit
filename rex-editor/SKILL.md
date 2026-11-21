@@ -1,9 +1,9 @@
 ---
-name: rex-operator
-description: Use the user's nvim, in a Rex pane beside this session's tmux agents, as their IDE. Find the editor pane by Rex session and working directory, open files and changes in it over RPC, and reload buffers after edits. Use when the user types /rex-operator, asks to show a file, diff, ADR, or change in their editor, or after you create or edit a file the user should review.
+name: rex-editor
+description: Use the user's nvim, in a Rex pane beside this session's tmux agents, as their IDE. Find the editor pane by Rex session and working directory, open files and changes in it over RPC, and reload buffers after edits. Use when the user types /rex-editor, asks to show a file, diff, ADR, or change in their editor, or after you create or edit a file the user should review.
 ---
 
-# Rex operator
+# Rex editor
 
 The user works in one Rex session per project. The editor is nvim in one Rex pane. This agent runs in a tmux window in
 the pane beside it. Find that nvim, and show files there so the user can review them. Keep making edits with the Edit
