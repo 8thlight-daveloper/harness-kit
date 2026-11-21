@@ -10,11 +10,8 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 | [completions/](completions/_workbench)         | `_workbench`, zsh completion for `workbench` project names                           |
 | [hooks/](hooks/open-ci-after-push)             | `open-ci-after-push`, a PostToolUse hook that opens the CI run after an agent pushes |
 | [iterate/](iterate/SKILL.md)                   | Walk through pending decisions or questions one at a time, with enough context to decide each |
-| [landline/](landline/SKILL.md)                 | Register a session with Landline, and enable read-only exchanges with matching peers |
-| [neovide-operator/](neovide-operator/SKILL.md) | Show files in the Neovide window that matches the working directory                  |
 | [operator/](operator/SKILL.md)                 | Turn a session into an operator that dispatches work to other agents                 |
 | [rex-operator/](rex-operator/SKILL.md)         | Show files in the nvim pane of the Rex session that runs this agent                  |
-| [tmux-operator/](tmux-operator/SKILL.md)       | Show files in an nvim session running in tmux                                        |
 | [ux-designer/](ux-designer/SKILL.md)           | Evaluate and shape product interfaces                                                |
 
 ## Install a skill
@@ -22,8 +19,8 @@ Skills, hooks, and scripts that work across agent harnesses such as Claude Code 
 Link the skill folder into each harness:
 
 ```sh
-ln -s "$PWD/neovide-operator" ~/.claude/skills/neovide-operator
-ln -s "$PWD/neovide-operator" ~/.codex/skills/neovide-operator
+ln -s "$PWD/operator" ~/.claude/skills/operator
+ln -s "$PWD/operator" ~/.codex/skills/operator
 ```
 
 `rex-operator` goes with `workbench`, which gives the tmux session the `REX_SESSION` and `REX_EDITOR_BLOCK` IDs
